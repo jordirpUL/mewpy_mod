@@ -30,17 +30,17 @@ def solution_decode(solution: Union[float, bool], decoder: Dict[Any, int] = None
 def _walk(symbolic, reverse=False):
     """
     Internal use!
-    Helping function to walk through an algebra expression implemented by the symbolic objects.
-    This function is heavily inspired by the sympy method preorder_traversal and postorder_traversal.
-    Credits to sympy contributors: https://github.com/sympy/sympy
-
-    :param symbolic: symbolic-like object
-    :param reverse: order of the traversal
-    :return:
+    Walk through the symbolic expression tree.
+    Adds parent tracking so downstream logic (e.g. regulatory continuous model)
+    can detect if a Symbol is inside a NOT operator.
     """
+
     if reverse:
 
         for child in symbolic.variables:
+            # Assign parent pointer
+            child.parent = symbolic
+
             for subtree in _walk(child, reverse):
                 yield subtree
 
@@ -51,4 +51,7 @@ def _walk(symbolic, reverse=False):
         yield symbolic
 
         for child in symbolic.variables:
+            # Assign parent pointer
+            child.parent = symbolic
+
             yield from _walk(child, reverse)

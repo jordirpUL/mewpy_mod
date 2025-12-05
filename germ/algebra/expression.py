@@ -6,7 +6,7 @@ import pandas as pd
 
 from .algebra_utils import solution_decode, _walk
 from .parsing import tokenize
-from .symbolic import NoneAtom, Symbolic, Symbol, And, Or
+from .symbolic import NoneAtom, Symbolic, Symbol, And, Or, Not
 
 if TYPE_CHECKING:
     from mewpy.germ.variables import Gene, Metabolite, Reaction, Regulator, Interaction, Target, Variable
@@ -220,54 +220,56 @@ class Expression:
                              missing_value=missing_value,
                              decoder=decoder,
                              **kwargs)
+    
+    @property
+    def is_boolean_expression(self):
+        # TRUE if the symbolic tree uses Boolean operators
+        return any(
+            isinstance(node, (And, Or, Not))
+            for node in _walk(self.symbolic)
+        )
+    
+    def evaluate_regulatory_continuous(self, values, g_act=1.0, g_rep=1.0):
+        baseline = 0.5
+        activators = []
+        repressors = []
 
-    def evaluate(self,
-                 values: Dict[str, float],
-                 coefficient: float = None,
-                 operators: Union[Dict[Type[Symbolic], Callable], Dict[Type[Symbolic], Any]] = None,
-                 missing_value: float = 0.0,
-                 decoder: dict = None,
-                 **kwargs) -> Any:
+        for node in _walk(self.symbolic):
 
-        """
-        Evaluate a Symbolic algebra expression based on
-        the coefficients/values of the Symbolic symbols - GERM model variables.
+            # ACTIVATOR: Symbol whose parent is NOT a Not()
+            if isinstance(node, Symbol):
+                parent = getattr(node, "parent", None)
+                if not (parent and getattr(parent, "is_not", False)):
+                    activators.append(values.get(node.name, baseline))
+                    continue
 
-        The symbolic expression is evaluated according to the Symbolic operators and values attributed to the symbols
-        in the values' dictionary.
+            # REPRESSOR: instance of Not()
+            if getattr(node, "is_not", False):
+                for child in node.variables:
+                    v = values.get(child.name, baseline)
+                    repressors.append(v)
 
-        :param values: A dictionary of values that the variables identifiers, aka symbols names,
-        must take during expression evaluation
-        :param coefficient: The value to be returned in case the expression is evaluated to True. Otherwise,
-        binary values 0 or 1 are returned.
-        :param operators: A dictionary of custom operators. That is, python operators-based evaluation
-        (e.g. 3 > 2 yield True) can be replaced by custom callable objects such as functions. For instance,
-        3 > 2 can be evaluated with max, and thus max(3, 2) yields 3 now.
-        :param missing_value: If a given variable/symbol is missing in the values' dictionary, the missing
-        value is used.
-        :param decoder: A custom dictionary for decoding the solution (key) into a given output (value).
-        Binary output is currently set to 0 or 1 by default
-        :param kwargs: Additional keyword arguments for Symbolic evaluate method
+        if not activators and not repressors:
+            return baseline
 
-        :return: The solution of the Symbolic expression evaluation as int, float or Any type.
-        """
-        res = float(self.symbolic.evaluate(values=values, operators=operators, default=missing_value, **kwargs))
-        #print("res_evaluate:",res)
-        return res
-        #res = solution_decode(res, decoder)
+        act_mean = sum(activators)/len(activators) if activators else baseline
+        rep_mean = sum(repressors)/len(repressors) if repressors else baseline
 
-        # if a coefficient is provided and the expression is evaluated to true, the respective coefficient will
-        # be returned
-        # print("coefficient:", coefficient)
-        # if coefficient is None:
-        #     return res
+        expr = baseline \
+            + g_act * (act_mean - baseline) \
+            - g_rep * (rep_mean - baseline)
 
-        # else:
+        return max(0.0, min(1.0, expr))
+    
+    def evaluate(self, values, coefficient=None, operators=None, missing_value=0.0, decoder=None, **kwargs):
 
-        #     if res:
-        #         return coefficient
+        if self.is_boolean_expression:
+            return self.evaluate_regulatory_continuous(values)
 
-        #     return res
+        return float(self.symbolic.evaluate(values=values,
+                                            operators=operators,
+                                            default=missing_value,
+                                            **kwargs))
 
     def truth_table(self,
                     values: Dict[str, float] = None,
@@ -332,14 +334,14 @@ class Expression:
                                             decoder=decoder)
             truth_table.append(state)
             
-        elif strategy == 'mean':            
+        elif strategy == 'mean':
+            # Do NOT override operators (previous behavior was wrong)
             state['result'] = self.evaluate(values=state,
                                             coefficient=coefficient,
-                                            operators={Or:mean,And:mean},
+                                            operators=operators,
                                             decoder=decoder)
             truth_table.append(state)
-            
-
+        
         elif strategy == 'all':
             variables = list(self.variables.keys())
 

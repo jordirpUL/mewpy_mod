@@ -255,41 +255,21 @@ class Symbolic:
 
         return left
 
-    def evaluate(self,
-                 values: Dict[str, Any] = None,
-                 operators: Dict[str, Callable] = None,
-                 default=0,
-                 **kwargs) -> Union[float, int, Any]:
+    def evaluate(self, values=None, operators=None, default=0.0, **kwargs):
 
-        """
-        Evaluate a Symbolic algebra expression based on the coefficients/values of the symbols or atoms contained
-        in the expression.
+        # Detect boolean regulatory expressions
+        contains_boolean = any(
+            isinstance(node, (And, Or, Not)) for node in self.atoms(symbols_only=False)
+        )
 
-        The symbolic expression can be evaluated according to the custom values
-        assigned to the symbols in the values' dictionary. Likewise, operators evaluation can also be altered
-        by passing a callable to a given operator in the operators' dictionary.
+        if contains_boolean:
+            # Delegate continuous evaluation to Expression
+            expr = Expression(self, {})
+            return expr.evaluate_regulatory_continuous(values)
 
-        A symbol is also a callable.
-
-        :param values: A dictionary of values that the symbols names must take during expression evaluation
-        :param operators: A dictionary of custom operators. That is, python operators-based evaluation
-        (e.g. 3 > 2 yield True) can be replaced by custom callable objects such as functions. For instance,
-        3 > 2 can be evaluated with max, and thus max(3, 2) yields 3 now.
-        :param default: The default value of a given symbol/variable.
-        The default value is used if a given variable/symbol is missing in the values dictionary.
-        :param kwargs: Additional keyword arguments for Symbolic evaluate method
-
-        :return: The solution of the Symbolic expression evaluation as int, float or Any type.
-        """
-
-        if not values:
-            values = {}
-
-        if not operators:
-            operators = {}
-
-        return self._tree_evaluation(values=values, operators=operators, default=default, **kwargs)
-
+        # Fallback to numerical evaluation
+        return self._evaluate(values=values, operators=operators, default=default, **kwargs)
+    
     @staticmethod
     @abc.abstractmethod
     def _evaluate(**kwargs):
@@ -376,31 +356,39 @@ class BoolTrue(Boolean):
     def _evaluate(**kwargs):
         return 1
 
-
 class And(Boolean):
     """
-    Boolean Operator AND
+    Boolean Operator AND (supports multi-input evaluation)
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         self.is_and = True
 
-    @staticmethod
-    def _evaluate(left=0.0, right=0.0, operators=None, **kwargs):
+    def _tree_evaluation(self, values, operators, default, **kwargs):
+        """
+        Custom evaluation: collect and evaluate all children together.
+        """
+        if not self.variables:
+            return self._evaluate(values=values, args=[], operators=operators, default=default, **kwargs)
 
+        child_values = [
+            child._tree_evaluation(values=values, operators=operators, default=default, **kwargs)
+            for child in self.variables
+        ]
+        return self._evaluate(args=child_values, values=values, operators=operators, default=default, **kwargs)
+
+    @staticmethod
+    def _evaluate(args=None, operators=None, **kwargs):
         if not operators:
             operators = {}
 
         operator = operators.get(And, None)
 
-        if operator is not None:
-            #return max(0.01,float(operator([left, right])))
-            return float(operator([left, right]))
+        if operator is not None and args is not None:
+            return float(operator(args))
 
-        #return solution_decode(float(left) & float(right))
-        return float(min(left, right))
+        return float(min(args)) if args else 0.0
 
     def __and__(self, *args):
         self.variables.extend(args)
@@ -408,40 +396,45 @@ class And(Boolean):
 
     __rand__ = __and__
 
-
 class Or(Boolean):
     """
-    Boolean Operator OR
+    Boolean Operator OR (supports multi-input evaluation)
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         self.is_or = True
 
-    @staticmethod
-    def _evaluate(left=0.0, right=0.0, operators=None, **kwargs):
+    def _tree_evaluation(self, values, operators, default, **kwargs):
+        """
+        Custom evaluation: collect and evaluate all children together.
+        """
+        if not self.variables:
+            return self._evaluate(values=values, args=[], operators=operators, default=default, **kwargs)
 
+        child_values = [
+            child._tree_evaluation(values=values, operators=operators, default=default, **kwargs)
+            for child in self.variables
+        ]
+        return self._evaluate(args=child_values, values=values, operators=operators, default=default, **kwargs)
+
+    @staticmethod
+    def _evaluate(args=None, operators=None, **kwargs):
         if not operators:
             operators = {}
 
         operator = operators.get(Or, None)
 
-        if operator is not None:
-            #return max(0.01,float(operator([left, right])))
-            return float(operator([left, right]))
+        if operator is not None and args is not None:
+            return float(operator(args))
 
-        #print("Returning MAX inside OR:",solution_decode(float(left) | float(right)))
-        #return solution_decode(float(left) | float(right))
-        #print("Returning MAX inside OR:",max(left, right))
-        return float(max(left, right))
+        return float(max(args)) if args else 0.0
 
     def __or__(self, *args):
         self.variables.extend(args)
         return self
 
     __ror__ = __or__
-
 
 class Not(Boolean):
     """

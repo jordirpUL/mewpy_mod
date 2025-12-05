@@ -70,6 +70,16 @@ def run_method_and_decode(method: 'LinearProblem',
     objective_value, status = decode_solver_solution(solution=solution)
     return objective_value, status
 
+def run_method_and_decode_fast(method, objective=None, constraints=None, **kwargs):
+    skw = {'get_values': False}
+    if objective:
+        skw['linear'] = objective if hasattr(objective, 'keys') else {str(objective): 1.0}
+    if constraints is not None:
+        skw['constraints'] = constraints
+    if 'minimize' in kwargs:
+        skw['minimize'] = kwargs['minimize']
+    sol = method.optimize(to_solver=True, solver_kwargs=skw, **kwargs)
+    return decode_solver_solution(solution=sol)
 
 # ---------------------------------
 # CoRegFlux utils

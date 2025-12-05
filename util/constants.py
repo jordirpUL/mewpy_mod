@@ -27,7 +27,7 @@ class ModelConstants:
     # Default reactions lower bound (used instead of -Inf)
     REACTION_LOWER_BOUND = -10000
     # Default tolerance for bounds and coefficients
-    TOLERANCE = 1E-10
+    TOLERANCE = 1E-5
     # reset solver
     RESET_SOLVER = True
     # Multiprocessing engine. If ray is installed, it is used by default.

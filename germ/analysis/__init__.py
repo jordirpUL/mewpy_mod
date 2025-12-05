@@ -4,6 +4,7 @@ from .fba import FBA
 from .pfba import pFBA
 from .rfba import RFBA
 from .srfba import SRFBA
+from .srfba_l2 import SRFBA_L2
 from .prom import PROM, target_regulator_interaction_probability
 from .prom_extended import PROMEXTENDED
 from .coregflux import CoRegFlux, predict_gene_expression
@@ -22,6 +23,7 @@ class Analysis(Enum):
     pFBA = pFBA
     RFBA = RFBA
     SRFBA = SRFBA
+    SRFBA_L2 = SRFBA_L2
     PROM = PROM
     CoRegFlux = CoRegFlux
 

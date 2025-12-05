@@ -49,8 +49,8 @@ class Parameter(Enum):
 
 
 default_parameters = {
-    Parameter.FEASIBILITY_TOL: 1e-9,
-    Parameter.OPTIMALITY_TOL: 1e-9,
+    Parameter.FEASIBILITY_TOL: 1e-6,
+    Parameter.OPTIMALITY_TOL: 1e-6,
 }
 
 
