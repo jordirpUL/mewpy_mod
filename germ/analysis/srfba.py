@@ -20,7 +20,8 @@ class SRFBA(pFBA):
                  model: Union[Model, MetabolicModel, RegulatoryModel],
                  solver: Union[str, Solver, None] = None,
                  build: bool = False,
-                 attach: bool = False):
+                 attach: bool = False,
+                 activity_floor: float = 0.0):
         """
         Steady-state Regulatory Flux Balance Analysis (SRFBA) of a metabolic-regulatory model.
         Implementation of a steady-state version of SRFBA for an integrated metabolic-regulatory model.
@@ -36,10 +37,16 @@ class SRFBA(pFBA):
         if build is true.
         :param build: Whether to build the linear problem upon instantiation. Default: False
         :param attach: Whether to attach the linear problem to the model upon instantiation. Default: False
+        :param activity_floor: Minimal allowed value for reaction-level
+        regulatory variables (bool_<reaction.id>). Must be in [0, 1).
         """
+        self.activity_floor = max(0.0, min(float(activity_floor), 0.9999))
+        
         super().__init__(model=model, solver=solver, build=build, attach=attach)
         self._model_default_lb = ModelConstants.REACTION_LOWER_BOUND
         self._model_default_ub = ModelConstants.REACTION_UPPER_BOUND
+        
+        
 
     @property
     def model_default_lb(self) -> float:
@@ -95,11 +102,15 @@ class SRFBA(pFBA):
         """
         boolean_variable = f'bool_{reaction.id}'
 
-        variables = [VariableContainer(name=boolean_variable,
-                                       sub_variables=[boolean_variable],
-                                       lbs=[0.0],
-                                       ubs=[1.0],
-                                       variables_type=[VarType.CONTINUOUS])]
+        # Use the configured activity floor for the reaction-level regulatory variable.
+        # This enforces: activity_floor <= bool_rxn <= 1.0
+        variables = [VariableContainer(
+            name=boolean_variable,
+            sub_variables=[boolean_variable],
+            lbs=[self.activity_floor],
+            ubs=[1.0],
+            variables_type=[VarType.CONTINUOUS]
+        )]
 
         lb, ub = reaction.bounds
 
